@@ -17,4 +17,5 @@ serve:
     host: 0.0.0.0
     port: 4467
 
-dsn: postgres://postgres:password@127.0.0.1:5455/postgres
+# dsn: postgres://postgres:password@127.0.0.1:5455/postgres
+dsn: memory

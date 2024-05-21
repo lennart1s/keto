@@ -33,13 +33,23 @@ RUN git clone https://github.com/lennart1s/keto.git ./
 #RUN go get github.com/ory/keto/cmd
 #RUN go get github.com/ory/x/profilex
 
-#RUN go install
+# RUN go install
 
 # RUN packr
 
 #RUN make
 
 # RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o keto
-RUN echo "Hello Alpine"
+
+RUN go build -tags sqlite
 
 CMD [ "go", "run", "./main.go", "serve", "-c", "./keto.yml" ]
+
+#RUN go build
+
+#FROM scratch
+
+#COPY --from=0 /go/src/github.com/lennart1s/keto/keto /usr/bin/keto
+#COPY --from=0 /go/src/github.com/lennart1s/keto/keto.yml /keto.yml
+
+#CMD [ "keto", "serve", "-c", "/keto.yml" ]
