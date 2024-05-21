@@ -38,6 +38,7 @@ func NewHandler(d handlerDeps) *handler {
 
 func (h *handler) RegisterReadRoutes(r *x.ReadRouter) {
 	r.GET(ReadRouteBase, h.getRelations)
+	r.GET("/multi-subject", h.multiSubject)
 }
 
 func (h *handler) RegisterWriteRoutes(r *x.WriteRouter) {

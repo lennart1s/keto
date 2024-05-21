@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ory/x/pointerx"
 
@@ -174,6 +175,99 @@ func (h *handler) getRelations(w http.ResponseWriter, r *http.Request, _ httprou
 	resp := &ketoapi.GetResponse{
 		RelationTuples: relations,
 		NextPageToken:  nextPage,
+	}
+
+	h.d.Writer().Write(w, r, resp)
+}
+
+func (h *handler) multiSubject(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ctx := r.Context()
+
+	q := r.URL.Query()
+
+	l := h.d.Logger()
+	for k := range q {
+		l = l.WithField(k, q.Get(k))
+	}
+	l.Debug("querying relationships")
+
+	pageSize := 32
+	if q.Has("page_size") {
+		var err error
+		pageSize, err = strconv.Atoi(q.Get("page_size"))
+		if err != nil {
+			h.d.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()))
+			return
+		}
+	}
+	remainingPageSize := pageSize
+
+	pageTokens := []string{}
+	if q.Has("page_token") {
+		pageToken := q.Get("page_token")
+		pageTokens = strings.Split(pageToken, "_")
+	}
+
+	ids := strings.Split(q.Get("subject_ids"), ",")
+	query := &ketoapi.RelationQuery{}
+	if q.Has("namespace") {
+		query.Namespace = pointerx.Ptr(q.Get("namespace"))
+	}
+	if q.Has("relation") {
+		query.Relation = pointerx.Ptr(q.Get("relation"))
+	}
+
+	var relations []*ketoapi.RelationTuple
+	nextPageTokens := []string{}
+	for index, id := range ids {
+		var paginationOpts []x.PaginationOptionSetter
+		paginationOpts = append(paginationOpts, x.WithSize(remainingPageSize))
+		if len(pageTokens) > index && pageTokens[index] != "0" {
+			paginationOpts = append(paginationOpts, x.WithToken(pageTokens[index]))
+		} else if len(pageTokens) > index && pageTokens[index] == "0" {
+			nextPageTokens = append(nextPageTokens, "0")
+			continue
+		}
+
+		query.SubjectID = pointerx.Ptr(id)
+
+		iq, err := h.d.ReadOnlyMapper().FromQuery(ctx, query)
+		if err != nil {
+			h.d.Writer().WriteError(w, r, err)
+			return
+		}
+
+		ir, nextPage, err := h.d.RelationTupleManager().GetRelationTuples(ctx, iq, paginationOpts...)
+		if err != nil {
+			h.d.Writer().WriteError(w, r, err)
+			return
+		}
+		if nextPage != "" {
+			nextPageTokens = append(nextPageTokens, nextPage)
+		} else {
+			nextPageTokens = append(nextPageTokens, "0")
+		}
+
+		rs, err := h.d.ReadOnlyMapper().ToTuple(ctx, ir...)
+		if err != nil {
+			h.d.Writer().WriteError(w, r, err)
+			return
+		}
+
+		relations = append(relations, rs...)
+
+		remainingPageSize -= len(rs)
+		if remainingPageSize <= 0 {
+			break
+		}
+	}
+
+	resp := &ketoapi.GetResponse{
+		RelationTuples: relations,
+	}
+
+	if !(len(nextPageTokens) == len(ids) && nextPageTokens[len(nextPageTokens)-1] == "0") {
+		resp.NextPageToken = strings.Join(nextPageTokens, "_")
 	}
 
 	h.d.Writer().Write(w, r, resp)
