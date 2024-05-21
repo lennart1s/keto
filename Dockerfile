@@ -1,4 +1,3 @@
-# Workaround for https://github.com/GoogleContainerTools/distroless/issues/1342
 FROM golang:1.21-bullseye AS builder
 
 RUN apt-get update && apt-get upgrade -y &&\
@@ -7,21 +6,17 @@ mkdir -p ./internal/httpclient &&\
 apt-get install git
 
 RUN git clone https://github.com/lennart1s/keto.git /go/src/github.com/lennart1s/keto
+# COPY . /go/src/github.com/lennart1s/keto
 
 WORKDIR /go/src/github.com/lennart1s/keto
-#COPY go.mod go.mod
-#COPY go.sum go.sum
-
-#COPY proto/go.mod proto/go.mod
-#COPY proto/go.sum proto/go.sum
 
 ENV CGO_ENABLED 1
 
 RUN go mod download
 
-#COPY . .
-
 RUN go build -buildvcs=false -tags sqlite -o /usr/bin/keto .
+
+RUN keto migrate up --yes -c ./keto.yml
 
 #########################
 
