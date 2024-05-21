@@ -1,55 +1,39 @@
-FROM golang:1.21.10-alpine
+# Workaround for https://github.com/GoogleContainerTools/distroless/issues/1342
+FROM golang:1.21-bullseye AS builder
 
-RUN apk add --no-cache git build-base
-#RUN apk add --no-cache make
+RUN apt-get update && apt-get upgrade -y &&\
+mkdir -p /var/lib/sqlite &&\
+mkdir -p ./internal/httpclient &&\
+apt-get install git
+
+RUN git clone https://github.com/lennart1s/keto.git /go/src/github.com/lennart1s/keto
 
 WORKDIR /go/src/github.com/lennart1s/keto
+#COPY go.mod go.mod
+#COPY go.sum go.sum
 
-RUN git clone https://github.com/lennart1s/keto.git ./
+#COPY proto/go.mod proto/go.mod
+#COPY proto/go.sum proto/go.sum
 
-#RUN /usr/bin/make ./Makefile
+ENV CGO_ENABLED 1
 
-#CMD [ "touch", "hello-alpine.txt" ]
+RUN go mod download
 
-#ENV GO111MODULE=off
-# RUN go get -u github.com/gobuffalo/packr/packr
+#COPY . .
 
+RUN go build -buildvcs=false -tags sqlite -o /usr/bin/keto .
 
-#RUN GO111MODULE=off go get github.com/gobuffalo/packr/v2/packr2@v2.8.3
+#########################
 
-#RUN go install github.com/gobuffalo/packr/v2/packr2@v2.8.3
+FROM gcr.io/distroless/base-nossl-debian12:nonroot AS runner
 
-# RUN go get -u github.com/gobuffalo/packr/packr
+COPY --from=builder --chown=nonroot:nonroot /var/lib/sqlite /var/lib/sqlite
+COPY --from=builder /usr/bin/keto /usr/bin/keto
+COPY --from=builder /go/src/github.com/lennart1s/keto/keto.yml /home/nonroot/keto.yml
 
-#ENV GO111MODULE=on
+VOLUME /var/lib/sqlite
 
-#RUN go mod tidy
-#RUN go mod download
-#RUN go mod verify
+EXPOSE 4466 4467
 
-# RUN go get 
-
-#RUN go get github.com/ory/herodot
-#RUN go get github.com/ory/keto/cmd
-#RUN go get github.com/ory/x/profilex
-
-# RUN go install
-
-# RUN packr
-
-#RUN make
-
-# RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o keto
-
-RUN go build -tags sqlite
-
-CMD [ "go", "run", "./main.go", "serve", "-c", "./keto.yml" ]
-
-#RUN go build
-
-#FROM scratch
-
-#COPY --from=0 /go/src/github.com/lennart1s/keto/keto /usr/bin/keto
-#COPY --from=0 /go/src/github.com/lennart1s/keto/keto.yml /keto.yml
-
-#CMD [ "keto", "serve", "-c", "/keto.yml" ]
+ENTRYPOINT ["keto"]
+CMD ["serve"]
